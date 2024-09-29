@@ -12,6 +12,12 @@
             font-family: 'Hiragino Kaku Gothic ProN', 'ヒラギノ角ゴ ProN W3', sans-serif;
             margin: 0;
         }
+        .fox-animation {
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+        }
         .top-container {
             background: #a7dee5;
             text-align: center;
@@ -93,6 +99,7 @@
     </head>
 
     <body>
+        <canvas width="96" height="96" class="fox-animation"></canvas>
         <div class="top-container">
             <img src="https://cdn.bsky.app/img/avatar/plain/did:plc:p7gnw6dyxzd2m5tmy7ucpiut/bafkreicu2hkyuvojwzss367fycu33hr4wfqvfszbwwc4optoghesxnuw4u@jpeg">
             <div class="top-container-name"><p>ろくしぃ / lokxii</p></div>
@@ -204,5 +211,7 @@
                 Build with plain HTML / CSS / JS in a single file.
             </div>
         </div>
+
+        <script src="fox.js"></script>
     </body>
 </html>
