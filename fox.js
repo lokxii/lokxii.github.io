@@ -12,11 +12,13 @@ const sprite = {
     frames: {
         idle: 5,
         idle2: 14,
+        turn: 8,
         movement: 8,
         catch: 11,
         damage: 5,
         sleep: 6,
         death: 7,
+        wake: 11,
     },
     fps: 9,
     velocity: 15,
@@ -34,11 +36,13 @@ function y_offset(name) {
     const indicies = {
         idle: 0,
         idle2: 1,
+        turn: 1,
         movement: 2,
         catch: 3,
         damage: 4,
         sleep: 5,
         death: 6,
+        wake: 3,
     };
     return indicies[name] * sprite.width;
 };
@@ -64,6 +68,16 @@ function fox_direction(current, mouse, width) {
     return mouse.x >= current.x + width * 0.5 ? 1 : -1
 }
 
+function move(current, mouse) {
+    const angle = find_angle(current, mouse, sprite.width);
+    const dy = Math.sin(angle) * sprite.velocity;
+    const dx = Math.cos(angle) * sprite.velocity;
+    current.y += dy;
+    current.x += dx;
+    canvas.style.top = current.y + "px";
+    canvas.style.left = current.x + "px";
+}
+
 async function fox_loop() {
     var frame = 0;
     var count = 0;
@@ -73,12 +87,36 @@ async function fox_loop() {
     var direction = 1;
     var currPos = { y: 0, x: 0, };
     var mousePos = { y: sprite.width * 0.5, x: sprite.width * 0.5 };
+    var catchTarget = { y: 0, x: 0 };
 
     document.addEventListener("mousemove", (event) => {
         mousePos = {
             x: event.clientX,
             y: event.clientY,
         };
+    });
+
+    document.addEventListener("mousedown", (event) => {
+        if (mode == "catch" || animation == "turn") {
+            return;
+        }
+        if (mode == "sleep") {
+            if (is_mouse_touching_fox(currPos, mousePos, sprite.width)) {
+                animation = "wake";
+                frame = 8;
+            }
+            return;
+        }
+        mode = "catch";
+        animation = "catch";
+        frame = 0;
+        catchTarget = {
+            x: event.clientX,
+            y: event.clientY,
+        };
+        if (fox_direction(currPos, mousePos, sprite.width) != direction) {
+            direction *= -1;
+        }
     });
 
     while (true) {
@@ -94,6 +132,12 @@ async function fox_loop() {
 
         switch (mode) {
             case "idle": {
+                if (fox_direction(currPos, mousePos, sprite.width) != direction) {
+                    mode = "turn";
+                    animation = "turn";
+                    frame = 0;
+                    break;
+                }
                 if (!is_mouse_touching_fox(currPos, mousePos, sprite.width)) {
                     mode = "chase";
                     animation = "movement";
@@ -102,6 +146,12 @@ async function fox_loop() {
                 break;
             }
             case "chase": {
+                if (fox_direction(currPos, mousePos, sprite.width) != direction) {
+                    mode = "turn";
+                    animation = "turn";
+                    frame = 0;
+                    break;
+                }
                 if (is_mouse_touching_fox(currPos, mousePos, sprite.width)) {
                     mode = "idle";
                     animation = "idle";
@@ -112,17 +162,20 @@ async function fox_loop() {
         }
 
         // movement
-        if (fox_direction(currPos, mousePos, sprite.width) != direction) {
-            direction *= -1;
-        }
-        if (mode == "chase") {
-            const angle = find_angle(currPos, mousePos, sprite.width);
-            const dy = Math.sin(angle) * sprite.velocity;
-            const dx = Math.cos(angle) * sprite.velocity;
-            currPos.y += dy;
-            currPos.x += dx;
-            canvas.style.top = currPos.y + "px";
-            canvas.style.left = currPos.x + "px";
+        switch (mode) {
+            case "chase": {
+                if (frame < 2) {
+                    break;
+                }
+                move(currPos, mousePos);
+                break;
+            }
+            case "catch": {
+                if (frame >= 3 && frame <= 6) {
+                    move(currPos, catchTarget);
+                }
+                break;
+            }
         }
 
         // animation
@@ -130,6 +183,11 @@ async function fox_loop() {
             frame = 0;
             switch (animation) {
                 case "idle": {
+                    if (Math.random() > 0.8) {
+                        animation = "sleep";
+                        mode = "sleep";
+                        break;
+                    }
                     if (count == idle_loop) {
                         animation = "idle2";
                         count = 0;
@@ -141,6 +199,22 @@ async function fox_loop() {
                 case "idle2": {
                     idle_loop = set_idle_loop_count();
                     animation = "idle";
+                    break;
+                }
+                case "turn": {
+                    direction *= -1;
+                    animation = "idle";
+                    mode = "idle";
+                    break;
+                }
+                case "catch": {
+                    animation = "idle2";
+                    mode = "idle";
+                    break;
+                }
+                case "wake": {
+                    animation = "idle";
+                    mode = "idle";
                     break;
                 }
             }
