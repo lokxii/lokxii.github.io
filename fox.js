@@ -48,8 +48,8 @@ function set_idle_loop_count() {
 }
 
 function is_mouse_touching_fox(current, mouse, width) {
-    return mouse.x >= current.x + width * 0.3 &&
-        mouse.x < current.x + width * 0.7 &&
+    return mouse.x >= current.x &&
+        mouse.x < current.x + width &&
         mouse.y >= current.y + width * 0.5 &&
         mouse.y < current.y + width;
 }
