@@ -10,15 +10,16 @@ const sprite = {
         return i; })(),
     width: 96,
     frames: {
-        idle: 5,
-        idle2: 14,
-        turn: 8,
-        movement: 8,
-        catch: 11,
-        damage: 5,
-        sleep: 6,
-        death: 7,
-        wake: 11,
+        idle: { start: 0, end: 5, direction: 1, index: 0 },
+        idle2: { start: 0, end: 14, direction: 1, index: 1 },
+        turn: { start: 0, end: 5, direction: 1, index: 1 },
+        movement: { start: 0, end: 8, direction: 1, index: 2 },
+        catch: { start: 0, end: 11, direction: 1, index: 3 },
+        damage: { start: 0, end: 5, direction: 1, index: 4 },
+        sleep: { start: 0, end: 6, direction: 1, index: 5 },
+        laydown: { start: 0, end: 7, direction: 1, index: 6 },
+        wake1: { start: 7, end: 3, direction: -1, index: 6 },
+        wake2: { start: 8, end: 11, direction: 1, index: 3 },
     },
     fps: 9,
     velocity: 15,
@@ -33,18 +34,7 @@ function x_offset(frame) {
 }
 
 function y_offset(name) {
-    const indicies = {
-        idle: 0,
-        idle2: 1,
-        turn: 1,
-        movement: 2,
-        catch: 3,
-        damage: 4,
-        sleep: 5,
-        death: 6,
-        wake: 3,
-    };
-    return indicies[name] * sprite.width;
+    return sprite.frames[name].index * sprite.width;
 };
 
 function set_idle_loop_count() {
@@ -100,10 +90,11 @@ async function fox_loop() {
         if (mode == "catch" || animation == "turn") {
             return;
         }
-        if (mode == "sleep") {
+        if (mode == "sleep" && animation == "sleep") {
             if (is_mouse_touching_fox(currPos, mousePos, sprite.width)) {
-                animation = "wake";
-                frame = 8;
+                animation = "wake1";
+                mode = "wake";
+                frame = sprite.frames.wake1.start;
             }
             return;
         }
@@ -120,6 +111,57 @@ async function fox_loop() {
     });
 
     while (true) {
+        // animation
+        if (frame == sprite.frames[animation].end) {
+            frame = 0;
+            switch (animation) {
+                case "idle": {
+                    if (Math.random() > 0.8) {
+                        animation = "laydown";
+                        mode = "sleep";
+                        break;
+                    }
+                    if (count == idle_loop) {
+                        animation = "idle2";
+                        count = 0;
+                    } else {
+                        count++;
+                    }
+                    break;
+                }
+                case "idle2": {
+                    idle_loop = set_idle_loop_count();
+                    animation = "idle";
+                    break;
+                }
+                case "turn": {
+                    direction *= -1;
+                    animation = "idle";
+                    mode = "idle";
+                    break;
+                }
+                case "catch": {
+                    animation = "idle2";
+                    mode = "idle";
+                    break;
+                }
+                case "laydown": {
+                    animation = "sleep";
+                    break;
+                }
+                case "wake1": {
+                    animation = "wake2";
+                    frame = sprite.frames.wake2.start;
+                    break;
+                }
+                case "wake2": {
+                    animation = "idle";
+                    mode = "idle";
+                    break;
+                }
+            }
+        }
+
         ctx.save();
         ctx.scale(direction, 1);
         ctx.drawImage(
@@ -127,8 +169,6 @@ async function fox_loop() {
             x_offset(frame), y_offset(animation), sprite.width, sprite.width,
             0, 0, canvas.width * direction, canvas.height);
         ctx.restore();
-
-        frame += 1;
 
         switch (mode) {
             case "idle": {
@@ -164,7 +204,7 @@ async function fox_loop() {
         // movement
         switch (mode) {
             case "chase": {
-                if (frame < 2) {
+                if (frame < 1) {
                     break;
                 }
                 move(currPos, mousePos);
@@ -178,49 +218,8 @@ async function fox_loop() {
             }
         }
 
-        // animation
-        if (frame == sprite.frames[animation]) {
-            frame = 0;
-            switch (animation) {
-                case "idle": {
-                    if (Math.random() > 0.8) {
-                        animation = "sleep";
-                        mode = "sleep";
-                        break;
-                    }
-                    if (count == idle_loop) {
-                        animation = "idle2";
-                        count = 0;
-                    } else {
-                        count++;
-                    }
-                    break;
-                }
-                case "idle2": {
-                    idle_loop = set_idle_loop_count();
-                    animation = "idle";
-                    break;
-                }
-                case "turn": {
-                    direction *= -1;
-                    animation = "idle";
-                    mode = "idle";
-                    break;
-                }
-                case "catch": {
-                    animation = "idle2";
-                    mode = "idle";
-                    break;
-                }
-                case "wake": {
-                    animation = "idle";
-                    mode = "idle";
-                    break;
-                }
-            }
-        }
-
         await sleep(1000/sprite.fps);
+        frame += sprite.frames[animation].direction;
         ctx.clearRect(0, 0, canvas.width, canvas.height);
     }
 }
