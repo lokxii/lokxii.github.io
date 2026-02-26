@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Range FFT Visualizer</title>
+    <style>
+        body {
+            margin: 0;
+            background-color: #121212;
+            color: #e0e0e0;
+            font-family: system-ui, -apple-system, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+        }
+        #container { width: 95%; max-width: 900px; text-align: center; }
+        canvas {
+            width: 100%;
+            height: 350px;
+            background: #1a1a1a;
+            border-radius: 12px;
+            border: 1px solid #333;
+        }
+        button {
+            padding: 14px 30px;
+            font-size: 1rem;
+            font-weight: bold;
+            cursor: pointer;
+            background: #bb86fc;
+            color: #000;
+            border: none;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        .info { color: #888; font-size: 0.9rem; margin-top: 10px; }
+    </style>
+</head>
+<body>
+
+    <div id="container">
+        <h2>Range FFT Visualizer</h2>
+        <button id="startBtn">Start Analysis</button>
+        <canvas id="visualizer"></canvas>
+        <div class="info">Focusing on the standard human vocal frequency range.</div>
+    </div>
+
+    <script>
+        const startBtn = document.getElementById('startBtn');
+        const canvas = document.getElementById('visualizer');
+        const ctx = canvas.getContext('2d');
+
+        let audioCtx, analyser, dataArray;
+
+        // Human voice range constants
+        const MIN_FREQ = 50;   // Low bass/male voice
+        const MAX_FREQ = 1000; // Upper clarity/consonants
+
+        async function initAudio() {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                const source = audioCtx.createMediaStreamSource(stream);
+
+                analyser = audioCtx.createAnalyser();
+                // Higher FFT size for better precision in low frequencies
+                analyser.fftSize = 4096;
+                analyser.minDecibels = -90;
+                analyser.maxDecibels = -10;
+
+                dataArray = new Uint8Array(analyser.frequencyBinCount);
+                source.connect(analyser);
+
+                startBtn.style.display = 'none';
+                draw();
+            } catch (err) {
+                alert('Microphone access denied.');
+            }
+        }
+
+        function draw() {
+            requestAnimationFrame(draw);
+
+            canvas.width = canvas.clientWidth;
+            canvas.height = canvas.clientHeight;
+
+            analyser.getByteFrequencyData(dataArray);
+
+            ctx.fillStyle = '#1a1a1a';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            const sampleRate = audioCtx.sampleRate;
+            const fftSize = analyser.fftSize;
+
+            // Calculate which array indices correspond to our frequency range
+            // Index = Frequency * FFT_Size / Sample_Rate
+            const minIndex = Math.ceil(MIN_FREQ * fftSize / sampleRate);
+            const maxIndex = Math.floor(MAX_FREQ * fftSize / sampleRate);
+            const rangeCount = maxIndex - minIndex;
+
+            const barWidth = canvas.width / rangeCount;
+
+            let sortedArray = dataArray.toSorted();
+            sortedArray = [...new Set(sortedArray)];
+            const threashold = sortedArray[Math.floor(sortedArray.length * 0.5)];
+            for (let i = 0; i < dataArray.length; i++) {
+                if (dataArray[i] < threashold) {
+                    dataArray[i] = 0;
+                }
+            }
+
+            // 1. Draw Spectrum Bars
+            for (let i = 0; i < rangeCount; i++) {
+                const actualIndex = i + minIndex;
+                const val = dataArray[actualIndex];
+                const percent = val / 255;
+                const barHeight = percent * (canvas.height - 60);
+
+                // Color mapping: Purple to Cyan
+                const hue = 260 + (i / rangeCount * 60);
+                ctx.fillStyle = `hsl(${hue}, 80%, 60%)`;
+
+                // Draw bar (centered vertically with padding for labels)
+                ctx.fillRect(i * barWidth, canvas.height - 40 - barHeight, barWidth, barHeight);
+            }
+
+            // 2. Draw X-Axis Labels
+            ctx.fillStyle = "#666";
+            ctx.font = "12px monospace";
+            ctx.textAlign = "center";
+
+            const labelFrequencies = [100, 200, 400, 800, 1000];
+
+            labelFrequencies.forEach(freq => {
+                // Map the frequency back to its X position on our "zoomed" scale
+                const relIndex = (freq * fftSize / sampleRate) - minIndex;
+                const x = (relIndex / rangeCount) * canvas.width;
+
+                if (x >= 0 && x <= canvas.width) {
+                    ctx.fillRect(x, canvas.height - 40, 1, 8); // Tick
+                    const txt = freq >= 1000 ? (freq/1000) + "kHz" : freq + "Hz";
+                    ctx.fillText(txt, x, canvas.height - 15);
+                }
+            });
+        }
+
+        startBtn.onclick = () => { if (!audioCtx) initAudio(); };
+    </script>
+</body>
+</html>
