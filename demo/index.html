@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Hong Kong Estate Ranking Demo</title>
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+      crossorigin=""
+    />
+    <link rel="stylesheet" href="./src/styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="control-panel" aria-label="Ranking controls">
+        <div class="control-row mode-row">
+          <fieldset class="segmented-field">
+            <legend>Mode</legend>
+            <label class="mode-option">
+              <input type="radio" name="listing-mode" value="rent" checked />
+              <span>Rent</span>
+            </label>
+            <label class="mode-option">
+              <input type="radio" name="listing-mode" value="purchase" />
+              <span>Purchase</span>
+            </label>
+          </fieldset>
+
+          <div class="summary-pill" id="result-summary">Loading data...</div>
+        </div>
+
+        <fieldset class="district-field">
+          <legend>District</legend>
+          <div class="district-actions">
+            <button class="ghost-button" type="button" id="select-all-districts">All</button>
+            <button class="ghost-button" type="button" id="clear-districts">Clear</button>
+          </div>
+          <div class="district-grid" id="district-options"></div>
+        </fieldset>
+
+        <div class="control-row budget-row">
+          <div class="range-copy">
+            <label for="budget-min">Budget</label>
+            <output id="budget-output">$0 - $0</output>
+          </div>
+          <div class="budget-controls">
+            <div class="range-control" id="budget-control">
+              <input id="budget-min" type="range" min="0" max="100000" value="0" step="1000" />
+              <input id="budget-max" type="range" min="0" max="100000" value="100000" step="1000" />
+            </div>
+            <div class="budget-inputs">
+              <label class="number-field compact" for="budget-min-input">
+                <span>Min</span>
+                <input id="budget-min-input" type="number" min="0" max="100000" value="0" step="1000" />
+              </label>
+              <label class="number-field compact" for="budget-max-input">
+                <span>Max</span>
+                <input id="budget-max-input" type="number" min="0" max="100000" value="100000" step="1000" />
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div class="control-row bottom-controls">
+          <div class="radius-field">
+            <label class="number-field" for="amenity-radius">
+              <span>Amenity radius</span>
+              <input id="amenity-radius" type="number" min="50" max="3000" step="50" value="500" />
+              <span>m</span>
+            </label>
+            <div class="radius-presets" aria-label="Amenity radius presets">
+              <button class="ghost-button radius-preset is-active" type="button" data-radius="500">500 m</button>
+              <button class="ghost-button radius-preset" type="button" data-radius="1000">1000 m</button>
+            </div>
+          </div>
+
+          <label class="select-field" for="per-district-limit">
+            <span>Show top</span>
+            <select id="per-district-limit">
+              <option value="1">1 per district</option>
+              <option value="3" selected>3 per district</option>
+              <option value="5">5 per district</option>
+              <option value="10">10 per district</option>
+              <option value="all">All matched</option>
+            </select>
+          </label>
+
+          <label class="select-field" for="global-result-limit">
+            <span>Limit</span>
+            <select id="global-result-limit">
+              <option value="25">25 total</option>
+              <option value="50">50 total</option>
+              <option value="100" selected>100 total</option>
+              <option value="200">200 total</option>
+              <option value="all">All shown</option>
+            </select>
+          </label>
+
+          <label class="select-field" for="amenity-layer-mode">
+            <span>Amenity layer</span>
+            <select id="amenity-layer-mode">
+              <option value="none" selected>None</option>
+              <option value="selected">Selected radius</option>
+              <option value="all">All amenities</option>
+            </select>
+          </label>
+
+          <div class="amenity-type-controls" aria-label="Amenity layer types">
+            <label class="checkbox-line compact">
+              <input id="show-restaurants" type="checkbox" checked />
+              <span>Restaurants</span>
+            </label>
+            <label class="checkbox-line compact">
+              <input id="show-supermarkets" type="checkbox" checked />
+              <span>Supermarkets</span>
+            </label>
+            <label class="checkbox-line compact">
+              <input id="show-lcsd" type="checkbox" checked />
+              <span>LCSD / Parks</span>
+            </label>
+            <label class="checkbox-line compact">
+              <input id="show-mtr" type="checkbox" checked />
+              <span>MTR</span>
+            </label>
+            <label class="checkbox-line compact">
+              <input id="show-clinics" type="checkbox" checked />
+              <span>Clinics</span>
+            </label>
+          </div>
+
+          <label class="checkbox-line">
+            <input id="near-mtr" type="checkbox" />
+            <span>Only show estates within 1 km of MTR</span>
+          </label>
+          <button class="primary-button" type="button" id="run-ranking">Enter</button>
+        </div>
+      </section>
+
+      <section class="workspace" aria-label="Ranking results">
+        <div class="map-panel">
+          <div class="panel-heading">
+            <h1>Estate Map</h1>
+            <span id="map-count">0 estates</span>
+          </div>
+          <div id="map" role="application" aria-label="Interactive estate map"></div>
+        </div>
+
+        <aside class="ranking-panel" aria-label="Ranked estate list">
+          <div class="panel-heading">
+            <h2>Ranking of Private Estates</h2>
+            <span id="ranking-count">0 shown</span>
+          </div>
+          <div class="ranking-table" id="ranking-list"></div>
+        </aside>
+      </section>
+
+      <section class="criteria-panel" id="criteria-panel" aria-live="polite">
+        <div class="criteria-empty">
+          Select an estate from the ranked list or map to view criteria.
+        </div>
+      </section>
+    </main>
+
+    <script
+      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+      crossorigin=""
+    ></script>
+    <script type="module" src="./src/app.js"></script>
+  </body>
+</html>
