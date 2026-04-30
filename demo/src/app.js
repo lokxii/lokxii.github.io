@@ -11,6 +11,7 @@ const DEFAULT_GLOBAL_RESULT_LIMIT = 100;
 const AMENITY_GRID_DEGREES = 0.01;
 const MIN_AMENITY_RADIUS_METERS = 50;
 const MAX_AMENITY_RADIUS_METERS = 3000;
+const DISPLAY_SCORE_PRECISION = 1000;
 
 const DISTRICT_TRANSLATION = {
   "中西區": "Central & Western",
@@ -64,7 +65,6 @@ const PURCHASE_WEIGHTS = {
 // Demo-only weights added by the frontend. These are created for demonstration purposes to surface the amenity score more prominently, and are not derived from the notebook model. Adjust as needed for different emphasis in the demo or based on future model updates.
 const DEMO_ESTATE_WEIGHTS = {
   mtrDistance: 0,
-  affordability: 0,
 };
 
 // Notebook field names do not perfectly match the available frontend columns.
@@ -97,6 +97,7 @@ const state = {
   markerLayer: null,
   amenityLayer: null,
   radiusLayer: null,
+  amenityLegend: null,
   markersById: new Map(),
 };
 
@@ -144,6 +145,7 @@ async function init() {
   state.markerLayer = L.layerGroup().addTo(state.map);
   state.amenityLayer = L.layerGroup().addTo(state.map);
   state.radiusLayer = L.layerGroup().addTo(state.map);
+  state.amenityLegend = createAmenityLegend().addTo(state.map);
 
   const [estates, districtFactorsCsv, amenities] = await Promise.all([
     fetchJson(DATA_PATHS.estates),
@@ -167,6 +169,7 @@ async function init() {
   renderDistrictOptions();
   bindEvents();
   configureBudgetRange();
+  renderAmenityLegend();
   applyRanking();
 }
 
@@ -304,6 +307,7 @@ function bindEvents() {
   elements.amenityLayerMode.addEventListener("change", () => {
     state.amenityLayerMode = elements.amenityLayerMode.value;
     renderAmenities();
+    renderAmenityLegend();
   });
   [
     elements.showRestaurants,
@@ -323,6 +327,7 @@ function bindEvents() {
         ].filter(Boolean),
       );
       renderAmenities();
+      renderAmenityLegend();
     });
   });
   elements.runRanking.addEventListener("click", applyRanking);
@@ -433,7 +438,7 @@ function applyRanking() {
       ...estate,
       score: normalizeValue(estate.scoreRaw, scoreRange),
     }))
-    .sort((a, b) => b.score - a.score || a.displayName.localeCompare(b.displayName));
+    .sort(compareRankedEstates);
 
   if (!state.ranked.some((estate) => estate.id === state.selectedEstateId)) {
     state.selectedEstateId = state.ranked[0]?.id ?? null;
@@ -471,10 +476,21 @@ function calculateScore(estate, weights, scoreStats) {
   const mtrDistanceScore =
     normalizeValue(estate.mtrDistance, scoreStats.mtrDistance, { inverse: true }) *
     DEMO_ESTATE_WEIGHTS.mtrDistance;
-  const affordabilityScore =
-    normalizeValue(estate.affordabilityPrice, scoreStats.affordabilityPrice, { inverse: true }) *
-    DEMO_ESTATE_WEIGHTS.affordability;
-  return modelScore + mtrDistanceScore + affordabilityScore;
+  return modelScore + mtrDistanceScore;
+}
+
+function compareRankedEstates(a, b) {
+  const displayScoreDiff = roundedDisplayScore(b.score) - roundedDisplayScore(a.score);
+  if (displayScoreDiff !== 0) return displayScoreDiff;
+
+  const affordabilityDiff = a.affordabilityPrice - b.affordabilityPrice;
+  if (affordabilityDiff !== 0) return affordabilityDiff;
+
+  return a.displayName.localeCompare(b.displayName);
+}
+
+function roundedDisplayScore(score) {
+  return Math.round(score * DISPLAY_SCORE_PRECISION);
 }
 
 function getFeatureValue(estate, district, key) {
@@ -493,7 +509,7 @@ function getNormalizedFeatureValue(estate, district, key, scoreStats) {
 }
 
 function buildScoreStats(estates, weights) {
-  const keys = [...Object.keys(weights), "mtrDistance", "affordabilityPrice"];
+  const keys = [...Object.keys(weights), "mtrDistance"];
   return Object.fromEntries(
     keys.map((key) => {
       const values = estates
@@ -735,24 +751,65 @@ function renderAmenities() {
         )
       : state.amenities.filter((item) => state.shownAmenityTypes.has(item.type));
 
-  const overlappingAmenityGroups = groupAmenitiesByCoordinate(amenities);
+  const amenityGroups = groupAmenitiesByCoordinate(amenities);
+  renderAmenityLegend(amenityGroups);
 
-  amenities.forEach((item) => {
-    const group = overlappingAmenityGroups.get(amenityCoordinateKey(item));
-    const displayLatLng = getAmenityDisplayLatLng(item, group);
-    const marker = L.circleMarker(displayLatLng, {
-      radius: amenityMarkerRadius(item.type),
-      color: amenityColor(item.type),
+  amenityGroups.forEach((group) => {
+    const firstItem = group[0];
+    const markerType = amenityGroupType(group);
+    const marker = L.circleMarker([firstItem.lat, firstItem.lng], {
+      radius: amenityMarkerRadius(markerType, group.length),
+      color: amenityColor(markerType),
       weight: 1,
-      fillColor: amenityColor(item.type),
+      fillColor: amenityColor(markerType),
       fillOpacity: 0.72,
     });
-    marker.bindPopup(`
-      <div class="popup-title">${escapeHtml(item.name || amenityLabel(item.type))}</div>
-      <div class="popup-meta">${amenityLabel(item.type)}${item.address ? ` · ${escapeHtml(item.address)}` : ""}</div>
-    `);
+    marker.bindPopup(renderAmenityPopup(group));
     marker.addTo(state.amenityLayer);
   });
+}
+
+function createAmenityLegend() {
+  const legend = L.control({ position: "bottomleft" });
+  legend.onAdd = () => {
+    const container = L.DomUtil.create("div", "amenity-legend leaflet-control");
+    L.DomEvent.disableClickPropagation(container);
+    L.DomEvent.disableScrollPropagation(container);
+    return container;
+  };
+  return legend;
+}
+
+function renderAmenityLegend(amenityGroups = new Map()) {
+  const container = state.amenityLegend?.getContainer();
+  if (!container) return;
+
+  if (state.amenityLayerMode === "none" || state.shownAmenityTypes.size === 0) {
+    container.innerHTML = "";
+    container.classList.add("is-hidden");
+    return;
+  }
+
+  container.classList.remove("is-hidden");
+  const legendTypes = [...state.shownAmenityTypes];
+  if ([...amenityGroups.values()].some((group) => amenityGroupType(group) === "mixed")) {
+    legendTypes.push("mixed");
+  }
+  container.innerHTML = `
+    <div class="amenity-legend-title">Amenity layer</div>
+    <div class="amenity-legend-items">
+      ${legendTypes
+        .map(
+          (type) => `
+            <div class="amenity-legend-item">
+              <span class="amenity-legend-dot" style="background:${amenityColor(type)}"></span>
+              <span>${escapeHtml(amenityLabel(type))}</span>
+            </div>
+          `,
+        )
+        .join("")}
+    </div>
+  `;
 }
 
 function groupAmenitiesByCoordinate(amenities) {
@@ -766,20 +823,39 @@ function groupAmenitiesByCoordinate(amenities) {
 }
 
 function amenityCoordinateKey(item) {
-  return `${item.type}:${item.lat.toFixed(7)}:${item.lng.toFixed(7)}`;
+  return `${item.lat.toFixed(7)}:${item.lng.toFixed(7)}`;
 }
 
-function getAmenityDisplayLatLng(item, group) {
-  if (!group || group.length <= 1) return [item.lat, item.lng];
+function renderAmenityPopup(group) {
+  const firstItem = group[0];
+  if (group.length === 1) {
+    return `
+      <div class="popup-title">${escapeHtml(firstItem.name || amenityLabel(firstItem.type))}</div>
+      <div class="popup-meta">${escapeHtml(amenityLabel(firstItem.type))}${firstItem.address ? ` · ${escapeHtml(firstItem.address)}` : ""}</div>
+    `;
+  }
 
-  const index = group.indexOf(item);
-  const angle = (Math.PI * 2 * index) / group.length;
-  const offsetMeters = 8;
-  const latOffset = (Math.sin(angle) * offsetMeters) / 111320;
-  const lngOffset =
-    (Math.cos(angle) * offsetMeters) /
-    (111320 * Math.max(Math.cos(degreesToRadians(item.lat)), 0.15));
-  return [item.lat + latOffset, item.lng + lngOffset];
+  const markerType = amenityGroupType(group);
+  const list = group
+    .map(
+      (item) => `
+        <li>
+          <div class="amenity-popup-name">${escapeHtml(item.name || amenityLabel(item.type))}</div>
+          <div class="popup-meta">${escapeHtml(amenityLabel(item.type))}${item.address ? ` · ${escapeHtml(item.address)}` : ""}</div>
+        </li>
+      `,
+    )
+    .join("");
+  return `
+    <div class="popup-title">${group.length} ${escapeHtml(amenityLabel(markerType))} at this location</div>
+    <div class="popup-meta">${escapeHtml(amenityLabel(markerType))}</div>
+    <ol class="amenity-popup-list">${list}</ol>
+  `;
+}
+
+function amenityGroupType(group) {
+  const types = new Set(group.map((item) => item.type));
+  return types.size === 1 ? group[0].type : "mixed";
 }
 
 function displayRankedEstates() {
@@ -797,7 +873,7 @@ function topPerDistrictRankedEstates() {
   });
   return [...grouped.values()]
     .flat()
-    .sort((a, b) => b.score - a.score || a.district.localeCompare(b.district));
+    .sort(compareRankedEstates);
 }
 
 function limitLabel() {
@@ -837,7 +913,6 @@ function renderCriteria() {
       <div>
         <div class="metric-grid">
           ${metric("Budget range", priceRange)}
-          ${metric("Affordability midpoint", formatCurrency(estate.affordabilityPrice))}
           ${metric("MTR distance", `${formatNumber(estate.mtrDistance, 2)} km`)}
           ${metric("Work travelling distance (District)", `${formatNumber(district["distance"], 2)} km`)}
           ${metric("Kindergartens availability (per 10,000 people) (District)", formatNumber(district["kindergarten / children"] * 10000, 2) + " / 10k people")}
@@ -874,11 +949,12 @@ function amenityColor(type) {
     lcsd: "#2e7d32",
     mtr: "#1f78d1",
     clinic: "#c74375",
+    mixed: "#627181",
   };
   return colors[type] ?? "#627181";
 }
 
-function amenityMarkerRadius(type) {
+function amenityMarkerRadius(type, groupSize = 1) {
   const radii = {
     restaurant: 3,
     supermarket: 4,
@@ -886,7 +962,7 @@ function amenityMarkerRadius(type) {
     mtr: 5,
     clinic: 4,
   };
-  return radii[type] ?? 4;
+  return (radii[type] ?? 4) + Math.min(groupSize - 1, 4);
 }
 
 function amenityLabel(type) {
@@ -896,6 +972,7 @@ function amenityLabel(type) {
     lcsd: "LCSD / park facility",
     mtr: "MTR station",
     clinic: "Clinic",
+    mixed: "Mixed amenities",
   };
   return labels[type] ?? "Amenity";
 }

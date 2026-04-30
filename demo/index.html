@@ -98,16 +98,15 @@
             </select>
           </label>
 
-          <label class="select-field" for="amenity-layer-mode">
-            <span>Amenity layer</span>
-            <select id="amenity-layer-mode">
-              <option value="none" selected>None</option>
-              <option value="selected">Selected radius</option>
-              <option value="all">All amenities</option>
-            </select>
-          </label>
-
           <div class="amenity-type-controls" aria-label="Amenity layer types">
+            <label class="select-field amenity-layer-select" for="amenity-layer-mode">
+              <span>Amenity layer</span>
+              <select id="amenity-layer-mode">
+                <option value="none" selected>None</option>
+                <option value="selected">Selected radius</option>
+                <option value="all">All amenities</option>
+              </select>
+            </label>
             <label class="checkbox-line compact">
               <input id="show-restaurants" type="checkbox" checked />
               <span>Restaurants</span>

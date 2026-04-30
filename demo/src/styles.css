@@ -343,7 +343,13 @@ input[type="radio"] {
   min-height: 40px;
   display: inline-flex;
   align-items: center;
+  flex: 1 1 620px;
+  flex-wrap: wrap;
   gap: 16px;
+}
+
+.amenity-layer-select {
+  margin-right: 4px;
 }
 
 .checkbox-line.compact {
@@ -476,6 +482,68 @@ h2 {
 .popup-meta {
   color: var(--muted);
   font-size: 0.88rem;
+}
+
+.amenity-popup-list {
+  max-height: 220px;
+  overflow-y: auto;
+  margin: 8px 0 0;
+  padding-left: 20px;
+}
+
+.amenity-popup-list li {
+  margin: 0 0 8px;
+}
+
+.amenity-popup-list li:last-child {
+  margin-bottom: 0;
+}
+
+.amenity-popup-name {
+  font-weight: 750;
+}
+
+.amenity-legend {
+  min-width: 150px;
+  padding: 10px 12px;
+  border: 1px solid rgba(23, 32, 42, 0.12);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 8px 24px rgba(21, 37, 54, 0.16);
+  color: var(--ink);
+}
+
+.amenity-legend.is-hidden {
+  display: none;
+}
+
+.amenity-legend-title {
+  margin-bottom: 8px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.amenity-legend-items {
+  display: grid;
+  gap: 6px;
+}
+
+.amenity-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.84rem;
+  font-weight: 650;
+}
+
+.amenity-legend-dot {
+  width: 10px;
+  height: 10px;
+  flex: 0 0 10px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgba(23, 32, 42, 0.18);
 }
 
 .ranking-table {

@@ -107,8 +107,7 @@ Frontend-added demo weights are in `DEMO_ESTATE_WEIGHTS`:
 
 ```js
 const DEMO_ESTATE_WEIGHTS = {
-  mtrDistance: 0.25,
-  affordability: 0.2,
+  mtrDistance: 0,
 };
 ```
 
@@ -117,17 +116,16 @@ These are explicit demo assumptions. Amenity boosts are not duplicated here beca
 The `mtrDistance` demo term is separate from `mtr_station_count`. `mtr_station_count` is the number of stations inside the selected radius. `mtrDistance` is the estate's nearest-station distance, scored with inverse min-max scaling so smaller distance contributes more:
 
 ```js
-mtrDistanceScore = (1 - (mtrDistance - filteredMin) / (filteredMax - filteredMin)) * 0.25
+mtrDistanceScore = (1 - (mtrDistance - filteredMin) / (filteredMax - filteredMin)) * DEMO_ESTATE_WEIGHTS.mtrDistance
 ```
 
-The `affordability` demo term uses the midpoint of the estate's active listing range:
+Affordability is not added to the score. It is used only as a tie-breaker when two estates have the same displayed match score. The app uses the midpoint of the estate's active listing range:
 
 ```js
 midPrice = (minPrice + maxPrice) / 2
-affordabilityScore = (1 - (midPrice - filteredMinMidPrice) / (filteredMaxMidPrice - filteredMinMidPrice)) * 0.2
 ```
 
-Rent mode uses `rentMin` / `rentMax`; purchase mode uses `purchaseMin` / `purchaseMax`. The budget slider still acts as a hard filter first, then affordability rewards cheaper estates among the remaining eligible results.
+Rent mode uses `rentMin` / `rentMax`; purchase mode uses `purchaseMin` / `purchaseMax`. The budget slider still acts as a hard filter first. If displayed scores tie, the lower midpoint price ranks first.
 
 Because the model weights can be negative, the combined raw score can also be negative. The UI display converts that final combined raw score to a 0-100 match score using min-max scaling over the currently filtered results:
 
